@@ -7,7 +7,6 @@
 
 var express = require('express'),
     http = require('http'),
-    nodemailer = require("nodemailer"),
     childprocess = require("child_process"),
     path = require("path"),
     bodyParser = require('body-parser'),
@@ -35,9 +34,25 @@ var verifyIP = function (clientIp) {
     return false;
 };
 
-var sendNotification = function(message){
-    //send http to slack integration
-    config.notification.slackHookUrl;
+var sendNotification = function(resultJSON){
+    var requestify = require('requestify');
+    var url = config.notification.slackHookUrl,
+        message = config.notification.baseMessage;
+    message.text = "*" + resultJSON.branch + "* branch on *" + resultJSON.repo+ "*";
+    if (resultJSON.done) {
+        message.text = "Deployed " + message.text;
+    }
+    else {
+        message.text = "*ERROR* deploying " + message.text;
+    }
+
+
+    requestify.post(url, message).then(function(response) {
+        if (response.statusCode != 200) writeLog("Failed sending notification to Slack with error: " + error, "error");
+    });
+
+    return message;
+    //call url with message in body
 };
 
 if (typeof localRepo == 'undefined' || typeof localBranch == 'undefined' || localRepo.length < 2  || localBranch.length < 2) {
@@ -62,7 +77,7 @@ switch (app.get('env')) {
 }
 
 app.all("/deploy", function(req, res, next){
-    var deployJSON, payload, ok;
+    var deployJSON, payload, ok, message;
     ok = false;
 
     if (! verifyIP(req.ip)) {
@@ -93,16 +108,27 @@ app.all("/deploy", function(req, res, next){
         writeLog("Starting deploying branch " + localBranch + " of project " + localRepo, "info");
         var deploy = childprocess.exec(config.deployBashScript + " " + localRepo + " " + localBranch, function(err, stdout, stderr){
             //console.log(deploy, err, stdout, stderr)
+            deployJSON = {
+                repo: localRepo,
+                branch: localBranch,
+                std: {
+                    status: deploy,
+                    error: err,
+                    out: stdout,
+                    err: stderr,
+                },
+            };
             if(err){
-                deployJSON = { error: true, message: err };
-                if(config.notification.sendOnError) sendNotification( deployJSON );
+                deployJSON.done = false;
+                if(config.notification.sendOnError) message = sendNotification( deployJSON );
                 writeLog("Deploy FAILED with message " + stderr, "error");
             } else {
-                deployJSON = { success: true,message: stdout  };
-                if(config.notification.sendOnSuccess) sendNotification( deployJSON );
-                writeLog("Deploy DONE with message " + stdout, "info");
+                deployJSON.done = true;
+                if(config.notification.sendOnSuccess) message = sendNotification( deployJSON );
+                writeLog("Deploy DONE with message:\n" + stdout, "info");
             }
-            res.json( deployJSON );
+
+            res.json( message );
         });
     };
 });

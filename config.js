@@ -2,9 +2,14 @@ module.exports = {
     repo: 'gamemn_gameplaza',
     deployBashScript: '/home/cgrimoldi/deploy.sh',
     notification: {
-        sendOnSuccess: false,
-        sendOnError: false,
-        slackHookUrl: ''
+        sendOnSuccess: true,
+        sendOnError: true,
+        slackHookUrl: 'https://hooks.slack.com/services/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',
+        baseMessage: {
+            "username": "The Deployer",
+            "icon_url": "https://s3-us-west-2.amazonaws.com/slack-files2/avatars/2015-10-16/12643406144_4857723267bf467300f4_48.jpg",
+            "text": "Deploy done"
+        }
     },
     port: 8765,
     allowedips: [

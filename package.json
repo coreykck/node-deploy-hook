@@ -13,8 +13,7 @@
     "express": "^3.4.8",
     "ip": "^1.0.1",
     "method-override": "^2.3.5",
-    "multer": "^1.0.6",
-    "nodemailer": "~0.5.2"
+    "requestify": "^0.1.17"
   },
   "engines": [
     "node >=0.4.0"
