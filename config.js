@@ -1,20 +1,17 @@
 module.exports = {
-    email: {
+    repo: 'gamemn_gameplaza',
+    deployBashScript: '/home/cgrimoldi/deploy.sh',
+    notification: {
         sendOnSuccess: false,
         sendOnError: false,
-        to: "example@example.com",
-        from: "node-deploy-hook",
-        subjectOnSuccess: "Successfully updated repository",
-        subjectOnError: "Failed to update respository",
-        transport: {
-            service: "Gmail",
-            auth: {
-                user: "somegmailuser@gmail.com",
-                pass: "somepass"
-            }
-        }
+        slackHookUrl: ''
     },
-    port: 8888,
-    serverRoot: '/var/www/'
-
+    port: 8765,
+    allowedips: [
+        '131.103.20.160/27',
+        '165.254.145.0/26',
+        '104.192.143.0/24',
+        '192.168.56.0/24',
+        '127.0.0.1/0',
+    ]
 };

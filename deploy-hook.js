@@ -10,82 +10,102 @@ var express = require('express'),
     nodemailer = require("nodemailer"),
     childprocess = require("child_process"),
     path = require("path"),
-
+    bodyParser = require('body-parser'),
+    methodOverride = require("method-override"),
     app = express(),
     config = require('./config'),
+    ip = require('ip'),
+    server = http.createServer(app).listen( config.port);
 
-    // port can be optionally configured (8888 by default)
-    server = http.createServer(app).listen( config.port );
+var localRepo = config.repo,
+    localBranch = app.settings.env;
 
+var writeLog = function (message, type) {
+    console.log((new Date()).toString()+ " [" + type + "] " + message);
+};
 
+var verifyIP = function (clientIp) {
+    var clientIp = ip.toLong(clientIp);
+    for (var id in config.allowedips) {
+        var allowed = ip.cidrSubnet(config.allowedips[id]);
+        if (clientIp >= ip.toLong(allowed.firstAddress) && clientIp <= ip.toLong(allowed.lastAddress)) {
+            return true;
+        }
+    }
+    return false;
+};
 
-// Allow node to be run with proxy passing
-app.enable('trust proxy');
+var sendNotification = function(message){
+    //send http to slack integration
+    config.notification.slackHookUrl;
+};
+
+if (typeof localRepo == 'undefined' || typeof localBranch == 'undefined' || localRepo.length < 2  || localBranch.length < 2) {
+    writeLog("Can't start server; need env vars repo and branch", "critical");
+    process.exit();
+}
+app.enable('trust proxy'); // Allow node to be run with proxy passing
+
+app.use( express.compress() ); // Compression (gzip)
+app.use( methodOverride() );
+app.use( bodyParser.json() ); // for parsing application/json
+app.use( bodyParser.urlencoded({ extended: true }) ); // for parsing application/x-www-form-urlencoded
 
 // Logging config
-app.configure('local', function(){
-    app.use(express.errorHandler({ dumpExceptions: true, showStack: true }));
-});
-app.configure('development', function(){
-    app.use(express.errorHandler({ dumpExceptions: true, showStack: true }));
-});
-app.configure('production', function(){
-    app.use(express.errorHandler());
-});
+switch (app.get('env')) {
+    case 'qa':
+    case 'dev':
+        app.use(express.errorHandler({ dumpExceptions: true, showStack: true }));
+        break;
+    default:
+        app.use(express.errorHandler());
+}
 
-// Compression (gzip)
-app.use( express.compress() );
-app.use( express.methodOverride() );
-app.use( express.bodyParser() );            // Needed to parse POST data sent as JSON payload
+app.all("/deploy", function(req, res, next){
+    var deployJSON, payload, ok;
+    ok = false;
 
-
-var sendMail = function(message){
-    var smtpTransport = nodemailer.createTransport("SMTP", config.email.transport);
-    smtpTransport.sendMail({
-        from: config.email.from,
-        to: config.email.to,
-        subject: message.subject,
-        text: message.text
-    }, function(err, res){
-        if(err) console.log((new Date()).toString() + " :: Error sending deployment email:: " + err);
-        else console.log((new Date()).toString() + " :: Successfully sent deployment email.");
-    });
-};
-
-app.all("/deploy", function(req, res){
-    var projectDir,
-        remoteBranch = req.params.remote_branch || 'origin',
-        localBranch = req.params.local_branch || 'master',
-        deployJSON, payload, ok;
-
-	ok = true;
-
-if(req.body.payload)
-	payload = JSON.parse(req.body.payload);
-
-    if(payload && payload.repository && payload.repository.name){        // POST request made by github service hook, use the repo name
-        projectDir = path.normalize(config.serverRoot+payload.repository.name);
-    } else if(req.query.project){                                          // GET request made thru nginx proxy, use the appended project GET param
-        projectDir = path.normalize(config.serverRoot+req.query.project); 
-    } else {                                                                // Else assume it is this repo or installed here, and was hit directly
-        projectDir = __dirname;                             
-	res.end('Invalid request');
-	ok = false;
+    if (! verifyIP(req.ip)) {
+        writeLog('Call not allowed from ip: ' + req.ip, "notice");
+        res.status(403).send('Forbidden')
     }
 
-if(ok) {
-    var deploy = childprocess.exec("cd "+projectDir+" && git stash && git pull "+remoteBranch+" "+localBranch, function(err, stdout, stderr){
-        if(err){
-            deployJSON = { error: true, subject: config.email.subjectOnError, message: err };
-            if(config.email.sendOnError) sendMail( deployJSON );
-        } else {
-            deployJSON = { success: true, subject: config.email.subjectOnSuccess, message: stdout  };
-            if(config.email.sendOnSuccess) sendMail( deployJSON );
+    if(req.is('json') && req.body)
+        payload = req.body;
+        if(payload && payload.push){        // POST request made by github service hook, use the repo name
+            var pushedRepo = payload.repository.name,
+                pushedBranch = payload.push.changes[0].new.name;
+            writeLog('push received from ' + pushedRepo + "/" + pushedBranch, "info");
+            if (localRepo == pushedRepo && pushedBranch == localBranch) {
+                ok = true;
+            }
+            else {
+                writeLog("Notting done because config mismatch", "notice");
+                res.status(404).send('Not Found')
+            }
+        } else {                                                                // Else assume it is this repo or installed here, and was hit directly
+            writeLog('Invalid request', "notice");
+            writeLog('request: ' + req.body, "debug");
+            res.status(404).send('Not Found')
         }
 
-        res.json( deployJSON );
-    });
-};
+    if(ok) {
+        writeLog("Starting deploying branch " + localBranch + " of project " + localRepo, "info");
+        var deploy = childprocess.exec(config.deployBashScript + " " + localRepo + " " + localBranch, function(err, stdout, stderr){
+            //console.log(deploy, err, stdout, stderr)
+            if(err){
+                deployJSON = { error: true, message: err };
+                if(config.notification.sendOnError) sendNotification( deployJSON );
+                writeLog("Deploy FAILED with message " + stderr, "error");
+            } else {
+                deployJSON = { success: true,message: stdout  };
+                if(config.notification.sendOnSuccess) sendNotification( deployJSON );
+                writeLog("Deploy DONE with message " + stdout, "info");
+            }
+            res.json( deployJSON );
+        });
+    };
 });
 
-console.log((new Date()).toString()+ ":: Node-deploy-hook server listening on port::", config.port, ", environment:: ", app.settings.env);
+writeLog("Node-deploy-hook server listening on port:: " + config.port + ", environment:: " + app.settings.env, "info");
+writeLog("Waiting push info for " + localRepo + "/" + localBranch, "info");
