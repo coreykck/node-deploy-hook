@@ -1,37 +1,10 @@
 node-deploy-hook
 =======================
-A super simple, lightweight Node.JS deployer to be used with Bitbucket or Github POST service hooks.
-
-[![NPM](https://nodei.co/npm/deploy-hook.png?downloads=true)](https://nodei.co/npm/deploy-hook/)
-
+A super simple, lightweight Node.JS deployer to be used with Bitbucket or Github POST service hooks
 
 Install
 -----------------------
 Follow the instructions [here](https://gist.github.com/oodavid/1809044) to set up your remote web-server root, deploy user ssh access, and service hooks.
-
-Install the stable npm version:
-```
-npm install deploy-hook
-```
-
-Install the development version:
-```
-git clone https://github.com/alexanderscott/node-deploy-hook 
-cd node-deploy-hook && npm install
-```
-
-Install the repo as www-data (for nginx) or apache user:
-```
-sudo -Hu www-data npm install --save node-deploy-hook
-```
-
-or
-
-```
-sudo -Hu www-data git clone https://github.com/alexanderscott/node-deploy-hook 
-cd node-deploy-hook && sudo -Hu www-data npm install
-```
-
 
 Add as a proxy to the deployment project's vhost in nginx or apache.
 For example in nginx, you could add:
@@ -52,6 +25,12 @@ cd /var/www/node-deploy-hook
 sudo -Hu www-data nohup node deploy-hook.js > ./log/deploy.log 2>&1&
 ```
 
+Environment variables
+-----------------------
+To change the branch you want to deploy, use NODE_ENV variable
+```
+export NODE_ENV=qa; nodejs -i deploy-hook.js
+```
 
 Change Log
 ----------------------
