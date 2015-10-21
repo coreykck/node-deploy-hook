@@ -40,7 +40,10 @@ var sendNotification = function(resultJSON){
         message = config.notification.baseMessage;
     message.text = "*" + resultJSON.branch + "* branch on *" + resultJSON.repo+ "*";
     if (resultJSON.done) {
-        message.text = "Deployed " + message.text;
+        message.text = "Deployed " + message.text + "\n";
+        message.text += "[" + resultJSON.commit_info.repo + "] commits by " + resultJSON.commit_info.author.display_name + "\n";
+        message.text += "Commit date: " + resultJSON.commit_info.date + "\n";
+        message.text += "Commit message: " + resultJSON.commit_info.message + "\n";
     }
     else {
         message.text = "*ERROR* deploying " + message.text;
@@ -89,10 +92,18 @@ app.all("/deploy", function(req, res, next){
         payload = req.body;
         if(payload && payload.push){        // POST request made by github service hook, use the repo name
             var pushedRepo = payload.repository.name,
-                pushedBranch = payload.push.changes[0].new.name;
+                pushedBranch = payload.push.changes[0].new.name,
+                info, infob;
             writeLog('push received from ' + pushedRepo + "/" + pushedBranch, "info");
             if (localRepo == pushedRepo && pushedBranch == localBranch) {
                 ok = true;
+                infob = payload.push.changes[0].new.target;
+                info = {
+                    repo: payload.repository.full_name,
+                    author: infob.author,
+                    message: infob.message,
+                    date: infob.date
+                }
             }
             else {
                 writeLog("Notting done because config mismatch", "notice");
@@ -111,6 +122,7 @@ app.all("/deploy", function(req, res, next){
             deployJSON = {
                 repo: localRepo,
                 branch: localBranch,
+                commit_info: info,
                 std: {
                     status: deploy,
                     error: err,
