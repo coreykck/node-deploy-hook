@@ -117,7 +117,7 @@ app.all("/deploy", function(req, res, next){
 
     if(ok) {
         writeLog("Starting deploying branch " + localBranch + " of project " + localRepo, "info");
-        var deploy = childprocess.exec(config.deployBashScript + " " + localRepo + " " + localBranch, function(err, stdout, stderr){
+        var deploy = childprocess.exec(config.deployBashScript + " " + localRepo + " " + localBranch + " " + config.appendToScript, function(err, stdout, stderr){
             //console.log(deploy, err, stdout, stderr)
             deployJSON = {
                 repo: localRepo,
